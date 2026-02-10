@@ -2,7 +2,7 @@
 // SELLING.JS — Selling Channels & Sales Logic
 // ============================================
 
-import { getMarketValue, roll, chance, pick } from "./items.js";
+import { getMarketValue, chance, pick } from "./items.js";
 import { earnCash, recordFlip } from "./player.js";
 
 // ── Selling Channels ─────────────────────────
@@ -12,9 +12,9 @@ export const CHANNELS = [
     name: "Street Buyer",
     description: "Quick cash, low margins. They always want a deal.",
     icon: "🧑",
-    speed: 0, // instant
+    speed: 0,
     feePercent: 0,
-    priceRange: [0.45, 0.65], // fraction of market value
+    priceRange: [0.45, 0.65],
     minRep: 0,
     risk: 0,
     flavor: "A guy in a hoodie waves you over.",
@@ -24,11 +24,11 @@ export const CHANNELS = [
     name: "Online Listing",
     description: "Post it online. Good margins, takes a few days.",
     icon: "💻",
-    speed: 2, // days to complete
+    speed: 2,
     feePercent: 12,
     priceRange: [0.8, 1.15],
     minRep: 0,
-    risk: 5, // % chance of scam/return
+    risk: 5,
     flavor: "Listed with 3 photos and a catchy headline.",
   },
   {
@@ -41,7 +41,7 @@ export const CHANNELS = [
     priceRange: [1.2, 2.5],
     minRep: 15,
     risk: 2,
-    requiresRarity: 2, // minimum rarity tier
+    requiresRarity: 2,
     flavor: "Sent to the collector mailing list.",
   },
   {
@@ -70,12 +70,10 @@ export const CHANNELS = [
   },
 ];
 
-// ── Check if a channel is available ──────────
 export function getAvailableChannels(player) {
   return CHANNELS.filter((ch) => player.reputation >= ch.minRep);
 }
 
-// ── Check if an item qualifies for a channel ─
 export function canSellOnChannel(item, channel) {
   if (channel.requiresRarity && item.rarity < channel.requiresRarity) {
     return false;
@@ -83,46 +81,99 @@ export function canSellOnChannel(item, channel) {
   return true;
 }
 
-// ── Calculate expected sell price ────────────
-export function getExpectedSellPrice(item, channel, economy = null) {
-  const marketValue = getMarketValue(item, economy);
-  const [minF, maxF] = channel.priceRange;
-  const fraction = minF + Math.random() * (maxF - minF);
-  let price = marketValue * fraction;
-
-  // Apply listing fee
-  if (channel.feePercent > 0) {
-    price *= 1 - channel.feePercent / 100;
-  }
-
-  return Math.round(Math.max(0.5, price) * 100) / 100;
+function applyFee(rawPrice, channel) {
+  if (channel.feePercent <= 0) return rawPrice;
+  return rawPrice * (1 - channel.feePercent / 100);
 }
 
-// ── Get a price estimate range for display ───
-export function getSellPriceEstimate(item, channel, economy = null) {
+function getMarginAdjustment(item, channel, targetMarginPct = 0) {
+  const clamped = Math.max(-40, Math.min(180, Number(targetMarginPct) || 0));
+  const marketValue = getMarketValue(item);
+  const buyPrice = Math.max(0.01, item.buyPrice || marketValue * 0.7);
+  const targetPrice = buyPrice * (1 + clamped / 100);
+
+  const baseline = (channel.priceRange[0] + channel.priceRange[1]) / 2;
+  const baselineAfterFee = applyFee(marketValue * baseline, channel);
+
+  const pressure = baselineAfterFee <= 0 ? 0 : (targetPrice - baselineAfterFee) / baselineAfterFee;
+
+  return {
+    marginPct: clamped,
+    pressure,
+    targetPrice,
+  };
+}
+
+function getSaleChance(channel, pressure, player) {
+  const intuition = player?.skills?.intuition || 1;
+  const charisma = player?.skills?.charisma || 1;
+  const skillBoost = intuition * 0.02 + charisma * 0.015;
+  const patienceBonus = channel.speed > 0 ? 0.08 : 0;
+  const baseChance = 0.88 - channel.risk / 140 + skillBoost + patienceBonus;
+
+  const pressurePenalty = pressure > 0 ? pressure * 0.55 : pressure * 0.12;
+  const finalChance = Math.max(0.12, Math.min(0.98, baseChance - pressurePenalty));
+  return finalChance;
+}
+
+export function getSellPriceEstimate(item, channel, economy = null, targetMarginPct = 0) {
   const marketValue = getMarketValue(item, economy);
   const [minF, maxF] = channel.priceRange;
-  let low = marketValue * minF;
-  let high = marketValue * maxF;
+  let low = applyFee(marketValue * minF, channel);
+  let high = applyFee(marketValue * maxF, channel);
 
-  if (channel.feePercent > 0) {
-    const feeMult = 1 - channel.feePercent / 100;
-    low *= feeMult;
-    high *= feeMult;
-  }
+  const { pressure, targetPrice, marginPct } = getMarginAdjustment(
+    item,
+    channel,
+    targetMarginPct,
+  );
+  const pricingBias = Math.max(0.65, Math.min(1.6, 1 + pressure * 0.4));
+  low *= pricingBias;
+  high *= pricingBias;
+
+  const saleChance = getSaleChance(channel, pressure, null);
 
   return {
     low: Math.round(Math.max(0.5, low) * 100) / 100,
     high: Math.round(Math.max(1.0, high) * 100) / 100,
+    targetPrice: Math.round(Math.max(0.5, targetPrice) * 100) / 100,
+    saleChance: Math.round(saleChance * 100),
+    marginPct,
   };
 }
 
-// ── List an item for sale ────────────────────
-export function listItemForSale(player, item, channel, economy = null) {
-  const expectedPrice = getExpectedSellPrice(item, channel, economy);
+export function listItemForSale(player, item, channel, economy = null, options = {}) {
+  const targetMarginPct = options.targetMarginPct ?? 0;
+  const marketValue = getMarketValue(item, economy);
+  const { pressure, targetPrice, marginPct } = getMarginAdjustment(
+    item,
+    channel,
+    targetMarginPct,
+  );
+  const saleChance = getSaleChance(channel, pressure, player);
+
+  const randomFactor = 0.85 + Math.random() * 0.35;
+  const expectedPrice = Math.round(
+    Math.max(0.5, applyFee(targetPrice * randomFactor, channel)) * 100,
+  ) / 100;
 
   if (channel.speed === 0) {
-    // Instant sale
+    const listedButNoBuyer = Math.random() > saleChance;
+    if (listedButNoBuyer) {
+      return {
+        instant: true,
+        success: false,
+        price: 0,
+        message:
+          marginPct > 40
+            ? "Your ask was too aggressive. No one bit today."
+            : "No buyers closed today. Try another channel or adjust margin.",
+        item,
+        channel: channel.id,
+        returnedToInventory: true,
+      };
+    }
+
     const scammed = channel.risk > 0 && chance(channel.risk);
     if (scammed) {
       return {
@@ -132,6 +183,7 @@ export function listItemForSale(player, item, channel, economy = null) {
         message: "SCAM! The buyer vanished with your item and didn't pay!",
         item,
         channel: channel.id,
+        returnedToInventory: false,
       };
     }
 
@@ -142,10 +194,10 @@ export function listItemForSale(player, item, channel, economy = null) {
       message: `Sold for $${expectedPrice.toFixed(2)}!`,
       item,
       channel: channel.id,
+      marginPct,
     };
   }
 
-  // Pending sale
   const completionDay = player.day + channel.speed;
   const pendingSale = {
     item: { ...item },
@@ -155,6 +207,8 @@ export function listItemForSale(player, item, channel, economy = null) {
     completionDay,
     expectedPrice,
     risk: channel.risk,
+    saleChance,
+    marginPct,
   };
 
   player.pendingSales.push(pendingSale);
@@ -164,17 +218,31 @@ export function listItemForSale(player, item, channel, economy = null) {
     success: true,
     price: expectedPrice,
     completionDay,
-    message: `Listed on ${channel.name}. Expected ~$${expectedPrice.toFixed(2)} in ${channel.speed} day(s).`,
+    message: `Listed on ${channel.name} at ${marginPct >= 0 ? "+" : ""}${marginPct}% margin. Expected ~$${expectedPrice.toFixed(2)} in ${channel.speed} day(s).`,
     item,
     channel: channel.id,
+    saleChance,
+    marginPct,
   };
 }
 
-// ── Process completed sales (called on day advance) ──
 export function processCompletedSales(completedSales, player) {
   const results = [];
 
   for (const sale of completedSales) {
+    const noBuyer = sale.saleChance !== undefined && Math.random() > sale.saleChance;
+    if (noBuyer) {
+      player.inventory.push({ ...sale.item, relisted: true });
+      results.push({
+        success: false,
+        item: sale.item,
+        channel: sale.channelName,
+        message: `${sale.item.name} did not sell at your ask. Item returned to inventory.`,
+        earnings: 0,
+      });
+      continue;
+    }
+
     const scammed = sale.risk > 0 && chance(sale.risk);
     if (scammed) {
       results.push({
@@ -187,7 +255,6 @@ export function processCompletedSales(completedSales, player) {
       continue;
     }
 
-    // Successful sale
     const earnings = sale.expectedPrice;
     earnCash(player, earnings);
     recordFlip(player, sale.item.buyPrice, earnings);
@@ -204,19 +271,20 @@ export function processCompletedSales(completedSales, player) {
   return results;
 }
 
-// ── Sell result flavor text ──────────────────
 const SELL_SUCCESS_FLAVORS = [
   "Ka-ching! Another flip in the books.",
   "The buyer looked thrilled. You got the better deal.",
   "Money changes hands. The hustle continues.",
-  "Smooth transaction. You're getting good at this.",
-  "Sold! Time to reinvest.",
+  "Clean flip. Solid margin.",
+  "You read the market perfectly.",
 ];
 
 const SELL_FAIL_FLAVORS = [
-  "That didn't go as planned...",
-  "Sometimes the flip flips you.",
-  "A hard lesson in the resale game.",
+  "The lead went cold. Maybe next time.",
+  "Bad luck. The deal fell through.",
+  "Market's rough today.",
+  "Timing wasn't right for this one.",
+  "Some flips miss. Keep moving.",
 ];
 
 export function getSellFlavor(success) {

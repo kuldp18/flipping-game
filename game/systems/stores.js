@@ -227,12 +227,47 @@ export function getAvailableStores(reputation) {
   return STORES.filter((s) => reputation >= s.unlockRep);
 }
 
+
+export function getGuaranteedOpenStoreId(currentDay, lastVisited = {}, availableStoreIds = null) {
+  const pool = availableStoreIds
+    ? STORES.filter((s) => availableStoreIds.includes(s.id))
+    : STORES;
+
+  if (pool.length === 0) return null;
+
+  const candidates = pool
+    .map((store) => ({
+      id: store.id,
+      remaining: getRestockCountdown(store.id, currentDay, lastVisited),
+      weight: Math.max(1, 8 - store.restockDays),
+    }))
+    .sort((a, b) => a.remaining - b.remaining || b.weight - a.weight);
+
+  // Bias toward the closest restock, but rotate by day so it feels human/random.
+  const shortlist = candidates.slice(0, Math.min(3, candidates.length));
+  const pickIndex = (currentDay + shortlist.length) % shortlist.length;
+  return shortlist[pickIndex].id;
+}
+
 // ── Check if store has restocked ─────────────
-export function canVisitStore(storeId, currentDay, lastVisited = {}) {
+export function canVisitStore(
+  storeId,
+  currentDay,
+  lastVisited = {},
+  availableStoreIds = null,
+) {
   const store = STORES.find((s) => s.id === storeId);
   if (!store) return false;
   if (!lastVisited[storeId]) return true; // never visited — always available
-  return currentDay - lastVisited[storeId] >= store.restockDays;
+
+  if (currentDay - lastVisited[storeId] >= store.restockDays) return true;
+
+  const guaranteedOpen = getGuaranteedOpenStoreId(
+    currentDay,
+    lastVisited,
+    availableStoreIds,
+  );
+  return guaranteedOpen === storeId;
 }
 
 // ── Get store restock countdown ──────────────

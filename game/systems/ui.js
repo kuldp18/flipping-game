@@ -18,7 +18,7 @@ import {
   getUsedSlots,
   getFreeSlots,
 } from "./player.js";
-import { STORES, getRestockCountdown } from "./stores.js";
+import { STORES, getRestockCountdown, canVisitStore, getGuaranteedOpenStoreId } from "./stores.js";
 import { CHANNELS, getSellPriceEstimate, canSellOnChannel } from "./selling.js";
 import {
   UPGRADES,
@@ -60,6 +60,7 @@ export function renderHeader(player, economy) {
       <span class="header-cash">${formatCash(player.cash)}</span>
     </div>
     <div class="header-right">
+      <button class="btn btn-small btn-sound" id="btn-sound" title="Toggle sound">🔊 SFX</button>
       <div class="energy-bar-container">
         <span class="energy-label">⚡ ${player.energy}/${player.maxEnergy}</span>
         <div class="energy-bar">
@@ -257,6 +258,11 @@ export function renderHubScreen(player, economy, activeEvents, callbacks) {
 export function renderStoreSelection(player, callbacks) {
   const stores = STORES.filter((s) => player.reputation >= s.unlockRep);
   const lockedStores = STORES.filter((s) => player.reputation < s.unlockRep);
+  const guaranteedOpenStore = getGuaranteedOpenStoreId(
+    player.day,
+    player.storesVisited,
+    stores.map((s) => s.id),
+  );
 
   $main.innerHTML = `
     <div class="store-select-screen">
@@ -272,7 +278,13 @@ export function renderStoreSelection(player, callbacks) {
               player.day,
               player.storesVisited,
             );
-            const canVisit = restock === 0;
+            const canVisit = canVisitStore(
+              store.id,
+              player.day,
+              player.storesVisited,
+              stores.map((s) => s.id),
+            );
+            const guaranteed = guaranteedOpenStore === store.id && restock > 0;
             const hasEnergy = player.energy >= store.energyCost;
             const disabled = !canVisit || !hasEnergy;
             return `
@@ -285,7 +297,7 @@ export function renderStoreSelection(player, callbacks) {
                   <span>⚡ ${store.energyCost} energy</span>
                   <span>🎲 Negotiation: ${store.negotiationDifficulty}%</span>
                 </div>
-                ${!canVisit ? `<div class="store-restock text-muted">Restocks in ${restock} day(s)</div>` : ""}
+                ${!canVisit ? `<div class="store-restock text-muted">Restocks in ${restock} day(s)</div>` : guaranteed ? `<div class="store-restock text-cyan">🌟 Special opening today</div>` : ""}
                 ${!hasEnergy ? `<div class="store-restock text-red">Not enough energy</div>` : ""}
               </div>
             </div>
@@ -587,7 +599,7 @@ export function renderSellScreen(player, economy, callbacks) {
         player.inventory.length === 0
           ? '<div class="empty-text">Nothing to sell. Go find some deals!</div>'
           : `
-      <div class="sell-instructions text-muted">Select an item, then choose a selling channel.</div>
+      <div class="sell-instructions text-muted">Select an item, set your target margin, then choose a selling channel.</div>
       <div class="sell-items">
         ${player.inventory
           .map((item) => {
@@ -603,6 +615,14 @@ export function renderSellScreen(player, economy, callbacks) {
           })
           .join("")}
       </div>
+
+      <div id="sell-margin-controls" class="sell-margin-controls" style="display:none">
+        <div class="panel-header">Pricing Strategy</div>
+        <label for="sell-margin" class="text-muted">Target margin: <span id="sell-margin-value" class="text-cyan">+25%</span></label>
+        <input id="sell-margin" type="range" min="-20" max="160" step="5" value="25" />
+        <div class="sell-margin-hint text-muted">Higher margin = better payout but lower chance to close.</div>
+      </div>
+
       <div id="sell-channel-section" class="sell-channels" style="display:none">
         <div class="panel-header">Choose Channel</div>
         ${channels
@@ -640,6 +660,7 @@ export function renderSellScreen(player, economy, callbacks) {
     ?.addEventListener("click", callbacks.onBack);
 
   let selectedItemId = null;
+  let selectedMargin = 25;
 
   document.querySelectorAll(".sell-item-card").forEach((card) => {
     const handler = () => {
@@ -649,7 +670,8 @@ export function renderSellScreen(player, economy, callbacks) {
         .forEach((c) => c.classList.remove("selected"));
       card.classList.add("selected");
       document.getElementById("sell-channel-section").style.display = "block";
-      updateSellEstimates(selectedItemId, player, economy);
+      document.getElementById("sell-margin-controls").style.display = "block";
+      updateSellEstimates(selectedItemId, player, economy, selectedMargin);
     };
     card.addEventListener("click", handler);
     card.addEventListener("keydown", (e) => {
@@ -657,17 +679,29 @@ export function renderSellScreen(player, economy, callbacks) {
     });
   });
 
+  const $marginSlider = document.getElementById("sell-margin");
+  const $marginValue = document.getElementById("sell-margin-value");
+  if ($marginSlider) {
+    $marginSlider.addEventListener("input", () => {
+      selectedMargin = parseInt($marginSlider.value, 10);
+      $marginValue.textContent = `${selectedMargin >= 0 ? "+" : ""}${selectedMargin}%`;
+      if (selectedItemId !== null) {
+        updateSellEstimates(selectedItemId, player, economy, selectedMargin);
+      }
+    });
+  }
+
   document.querySelectorAll(".btn-channel").forEach((btn) => {
     if (btn.classList.contains("btn-locked")) return;
     btn.addEventListener("click", () => {
       if (selectedItemId !== null) {
-        callbacks.onSell(selectedItemId, btn.dataset.channel);
+        callbacks.onSell(selectedItemId, btn.dataset.channel, selectedMargin);
       }
     });
   });
 }
 
-function updateSellEstimates(itemId, player, economy) {
+function updateSellEstimates(itemId, player, economy, targetMargin = 25) {
   const item = player.inventory.find((i) => i.id === itemId);
   if (!item) return;
   const $estimate = document.getElementById("sell-estimate");
@@ -676,8 +710,8 @@ function updateSellEstimates(itemId, player, economy) {
     const qualifies = canSellOnChannel(item, ch);
     if (!qualifies)
       return `<div class="text-muted">${ch.name}: Item doesn't qualify</div>`;
-    const est = getSellPriceEstimate(item, ch, economy);
-    return `<div>${ch.icon} ${ch.name}: <span class="text-green">${formatCash(est.low)} – ${formatCash(est.high)}</span></div>`;
+    const est = getSellPriceEstimate(item, ch, economy, targetMargin);
+    return `<div>${ch.icon} ${ch.name}: <span class="text-green">${formatCash(est.low)} – ${formatCash(est.high)}</span> · Ask ${formatCash(est.targetPrice)} · <span class="text-yellow">${est.saleChance}% sale chance</span></div>`;
   });
   $estimate.innerHTML =
     `<div class="panel-header">Estimated Prices</div>` + lines.join("");
