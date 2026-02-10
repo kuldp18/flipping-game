@@ -2,7 +2,7 @@
 // SELLING.JS — Selling Channels & Sales Logic
 // ============================================
 
-import { getMarketValue, roll, chance, pick } from "./items.js";
+import { getMarketValue, chance, pick, clamp } from "./items.js";
 import { earnCash, recordFlip } from "./player.js";
 
 // ── Selling Channels ─────────────────────────
@@ -118,12 +118,77 @@ export function getSellPriceEstimate(item, channel, economy = null) {
 }
 
 // ── List an item for sale ────────────────────
-export function listItemForSale(player, item, channel, economy = null) {
-  const expectedPrice = getExpectedSellPrice(item, channel, economy);
+function getChannelTargetMargin(channel) {
+  const avgRange = (channel.priceRange[0] + channel.priceRange[1]) / 2;
+  return Math.round((avgRange - 1) * 100);
+}
+
+export function getSalePreview(player, item, channel, marginPercent, economy = null) {
+  const marketValue = getMarketValue(item, economy);
+  const feeMultiplier = 1 - channel.feePercent / 100;
+  const askMultiplier = 1 + marginPercent / 100;
+  const requestedPrice = Math.max(0.5, marketValue * askMultiplier);
+
+  const channelTargetMargin = getChannelTargetMargin(channel);
+  const marginDelta = marginPercent - channelTargetMargin;
+  const statsBoost =
+    player.skills.charisma * 2.4 +
+    player.skills.marketKnowledge * 1.8 +
+    player.skills.intuition * 1.2;
+  const riskPenalty = channel.risk * 0.6;
+  const baseChance = channel.speed === 0 ? 84 : 75;
+  const successChance = clamp(
+    Math.round(baseChance + statsBoost - riskPenalty - Math.max(0, marginDelta) * 1.1 + Math.max(0, -marginDelta) * 0.45),
+    8,
+    97,
+  );
+
+  const minMarket = marketValue * Math.max(0.2, channel.priceRange[0]);
+  const maxMarket = marketValue * Math.max(channel.priceRange[1], askMultiplier * 1.1);
+  const expectedOnSuccess = clamp(requestedPrice, minMarket, maxMarket) * feeMultiplier;
+
+  return {
+    successChance,
+    expectedOnSuccess: Math.round(expectedOnSuccess * 100) / 100,
+    requestedPrice: Math.round(requestedPrice * 100) / 100,
+    channelTargetMargin,
+  };
+}
+
+export function listItemForSale(
+  player,
+  item,
+  channel,
+  marginPercent = 0,
+  economy = null,
+) {
+  const preview = getSalePreview(
+    player,
+    item,
+    channel,
+    marginPercent,
+    economy,
+  );
+  const expectedPrice = preview.expectedOnSuccess;
+  const successRoll = Math.random() * 100;
+  const success = successRoll <= preview.successChance;
 
   if (channel.speed === 0) {
     // Instant sale
-    const scammed = channel.risk > 0 && chance(channel.risk);
+    const scammed = success && channel.risk > 0 && chance(channel.risk);
+    if (!success) {
+      return {
+        instant: true,
+        success: false,
+        price: 0,
+        message: `No deal — buyers balked at ${marginPercent}% margin.`,
+        item,
+        channel: channel.id,
+        marginPercent,
+        successChance: preview.successChance,
+      };
+    }
+
     if (scammed) {
       return {
         instant: true,
@@ -139,9 +204,11 @@ export function listItemForSale(player, item, channel, economy = null) {
       instant: true,
       success: true,
       price: expectedPrice,
-      message: `Sold for $${expectedPrice.toFixed(2)}!`,
+      message: `Sold for $${expectedPrice.toFixed(2)} at ${marginPercent}% margin!`,
       item,
       channel: channel.id,
+      marginPercent,
+      successChance: preview.successChance,
     };
   }
 
@@ -154,6 +221,8 @@ export function listItemForSale(player, item, channel, economy = null) {
     listedDay: player.day,
     completionDay,
     expectedPrice,
+    successChance: preview.successChance,
+    marginPercent,
     risk: channel.risk,
   };
 
@@ -164,9 +233,11 @@ export function listItemForSale(player, item, channel, economy = null) {
     success: true,
     price: expectedPrice,
     completionDay,
-    message: `Listed on ${channel.name}. Expected ~$${expectedPrice.toFixed(2)} in ${channel.speed} day(s).`,
+    message: `Listed on ${channel.name} at ${marginPercent}% margin. ~${preview.successChance}% chance to close for ~$${expectedPrice.toFixed(2)} in ${channel.speed} day(s).`,
     item,
     channel: channel.id,
+    marginPercent,
+    successChance: preview.successChance,
   };
 }
 
@@ -175,6 +246,18 @@ export function processCompletedSales(completedSales, player) {
   const results = [];
 
   for (const sale of completedSales) {
+    const sold = Math.random() * 100 <= (sale.successChance || 60);
+    if (!sold) {
+      results.push({
+        success: false,
+        item: sale.item,
+        channel: sale.channelName,
+        message: `${sale.item.name} expired unsold at ${sale.marginPercent || 0}% margin.`,
+        earnings: 0,
+      });
+      continue;
+    }
+
     const scammed = sale.risk > 0 && chance(sale.risk);
     if (scammed) {
       results.push({
