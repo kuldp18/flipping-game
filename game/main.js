@@ -69,6 +69,7 @@ import {
   screenTransition,
   applyTheme,
 } from "./systems/ui.js";
+import { playSfx, setSoundEnabled, isSoundEnabled } from "./systems/audio.js";
 
 // ── Game State ───────────────────────────────
 let state = {
@@ -122,6 +123,22 @@ document.addEventListener("keydown", (e) => {
 
 // ── Screen Navigation ────────────────────────
 
+
+function refreshHeader() {
+  renderHeader(state.player, state.economy);
+  const btn = document.getElementById("btn-sound");
+  if (btn) {
+    btn.textContent = isSoundEnabled() ? "🔊 SFX" : "🔇 SFX";
+    btn.onclick = () => {
+      const next = !isSoundEnabled();
+      setSoundEnabled(next);
+      btn.textContent = next ? "🔊 SFX" : "🔇 SFX";
+      playSfx("click");
+    };
+  }
+}
+
+
 function showTitleScreen() {
   state.currentScreen = "title";
   document.getElementById("header-bar").style.display = "none";
@@ -162,7 +179,7 @@ function showHub() {
   state.currentScreen = "hub";
   state.currentStoreId = null;
   state.currentStoreItems = [];
-  renderHeader(state.player, state.economy);
+  refreshHeader();
   screenTransition(() => {
     renderHubScreen(state.player, state.economy, state.activeEvents, {
       onStores: showStoreSelection,
@@ -198,7 +215,8 @@ function enterStore(storeId) {
   }
 
   // Check restock
-  if (!canVisitStore(storeId, state.player.day, state.player.storesVisited)) {
+  const unlockedStoreIds = STORES.filter((s) => state.player.reputation >= s.unlockRep).map((s) => s.id);
+  if (!canVisitStore(storeId, state.player.day, state.player.storesVisited, unlockedStoreIds)) {
     showNotification("Store hasn't restocked yet.", "error");
     return;
   }
@@ -214,7 +232,7 @@ function enterStore(storeId) {
   state.currentStoreItems = generateStoreInventory(store, state.economy);
 
   state.currentScreen = "storeBrowse";
-  renderHeader(state.player, state.economy);
+  refreshHeader();
   screenTransition(() => {
     renderStoreBrowse(
       store,
@@ -333,7 +351,8 @@ function doBuy(itemIndex, price) {
   // Visual feedback
   animateCashChange(-price);
   showNotification(`Bought ${item.name} for ${formatCash(price)}!`, "success");
-  renderHeader(state.player, state.economy);
+  playSfx("buy");
+  refreshHeader();
 
   autoSave();
 
@@ -388,7 +407,7 @@ function doRepair(itemId) {
   repairItem(item);
   animateCashChange(-cost);
   showNotification(`Repaired ${item.name} for ${formatCash(cost)}!`, "success");
-  renderHeader(state.player, state.economy);
+  refreshHeader();
   autoSave();
 
   // Re-render inventory
@@ -406,7 +425,7 @@ function doDrop(itemId) {
   showConfirm(`Drop "${item.name}"? You won't get it back.`, () => {
     removeItemFromInventory(state.player, itemId);
     showNotification(`Dropped ${item.name}.`, "info");
-    renderHeader(state.player, state.economy);
+    refreshHeader();
     autoSave();
     renderInventory(state.player, state.economy, {
       onBack: showHub,
@@ -428,7 +447,7 @@ function showSellScreen() {
   });
 }
 
-function doSell(itemId, channelId) {
+function doSell(itemId, channelId, targetMarginPct = 25) {
   const item = state.player.inventory.find((i) => i.id === itemId);
   const channel = CHANNELS.find((c) => c.id === channelId);
   if (!item || !channel) return;
@@ -454,8 +473,14 @@ function doSell(itemId, channelId) {
     item,
     adjustedChannel,
     state.economy,
+    { targetMarginPct },
   );
   const flavor = getSellFlavor(result.success);
+
+  if (result.returnedToInventory) {
+    addItemToInventory(state.player, item);
+    playSfx("fail");
+  }
 
   if (result.instant && result.success) {
     earnCash(state.player, result.price);
@@ -464,10 +489,13 @@ function doSell(itemId, channelId) {
     animateCashChange(result.price);
     // Skill gain from selling
     applySkillGains(state.player, { marketKnowledge: 0.05, intuition: 0.03 });
+    playSfx("sell");
   }
 
-  renderHeader(state.player, state.economy);
+  refreshHeader();
   autoSave();
+
+  if (!result.success && !result.returnedToInventory) playSfx("fail");
 
   showSellResult(result, flavor, () => {
     showSellScreen();
@@ -497,7 +525,7 @@ function doBuyUpgrade(upgradeId) {
       applyTheme(result.upgrade.effect.theme);
     }
 
-    renderHeader(state.player, state.economy);
+    refreshHeader();
     autoSave();
   } else {
     showNotification(result.message, "error");
@@ -525,6 +553,7 @@ function showStatsScreen() {
 
 function doRest() {
   showConfirm("End the day and rest? Energy will be fully restored.", () => {
+    playSfx("day");
     // Process day advance
     const completedSales = advanceDay(state.player);
     const salesResults = processCompletedSales(completedSales, state.player);
@@ -549,7 +578,7 @@ function doRest() {
 
     // Show day end summary
     state.currentScreen = "dayEnd";
-    renderHeader(state.player, state.economy);
+    refreshHeader();
     screenTransition(() => {
       renderDayEndSummary(state.player, salesResults, {
         onNewDay: () => {

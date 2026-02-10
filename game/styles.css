@@ -1461,3 +1461,108 @@ body.theme-ocean {
   background: var(--accent-cyan);
   color: var(--bg-primary);
 }
+
+/* === Desktop polish pass === */
+:root {
+  --font-scale-body: clamp(1.22rem, 1vw + 0.95rem, 1.45rem);
+  --font-scale-title: clamp(0.82rem, 0.6vw + 0.72rem, 1.02rem);
+}
+
+body {
+  font-size: var(--font-scale-body);
+  letter-spacing: 0.01em;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(0, 229, 255, 0.08), transparent 35%),
+    radial-gradient(circle at 80% 100%, rgba(255, 110, 199, 0.08), transparent 35%),
+    var(--bg-primary);
+}
+
+#game-container {
+  max-width: 1180px;
+}
+
+#main-content {
+  padding: 24px;
+}
+
+.panel,
+.store-card,
+.inv-item-card,
+.sell-item-card,
+.upgrade-card,
+.stat-card,
+.neg-option,
+.btn-channel {
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25), 0 8px 0 rgba(0, 0, 0, 0.2);
+}
+
+.header-title,
+.panel-header,
+.btn-label,
+.item-name,
+.store-name {
+  font-size: var(--font-scale-title);
+}
+
+.hub-actions {
+  grid-template-columns: repeat(3, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.store-list,
+.sell-items {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.inventory-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.btn-action {
+  min-height: 122px;
+}
+
+.btn-sound {
+  font-size: 0.85rem;
+  min-width: 90px;
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+
+.sell-margin-controls {
+  margin-bottom: 10px;
+  padding: 12px;
+  border: var(--pixel-size) solid var(--border);
+  background: rgba(20, 28, 40, 0.7);
+}
+
+#sell-margin {
+  width: 100%;
+  margin: 8px 0;
+  accent-color: var(--accent-cyan);
+}
+
+.sell-margin-hint {
+  font-size: 1rem;
+}
+
+.store-card .store-icon,
+.sell-item-card .item-category,
+.inv-item-card .item-category {
+  filter: drop-shadow(0 0 6px rgba(0, 229, 255, 0.35));
+}
+
+@media (max-width: 900px) {
+  #game-container {
+    max-width: 100%;
+  }
+
+  .hub-actions,
+  .store-list,
+  .sell-items,
+  .inventory-grid {
+    grid-template-columns: 1fr;
+  }
+}
