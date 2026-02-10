@@ -1,0 +1,231 @@
+ROLE:
+You are a senior indie game designer + front-end engineer + pixel artist. Your task is to design and implement a **text-based flipping simulator game** with **pixel-art aesthetics** using **plain HTML, CSS, and JavaScript only** (no React, no frameworks, no game engines). The game must feel deep, addictive, and systems-driven despite being text-first.
+
+GAME CONCEPT (CORE LOOP):
+The player is a small-time reseller who flips items for profit.
+1. Visit different thrift stores / markets
+2. Buy underpriced items
+3. Negotiate, repair, bundle, or upgrade items
+4. Sell them through various channels
+5. Reinvest profits into skills, tools, inventory space, and aesthetics
+6. Scale from street-level hustler → regional reseller → legendary flipper
+
+The game is **turn-based**, **text-driven**, but visually enhanced with **pixel UI elements**, **icons**, and **retro animations**.
+
+---
+
+CORE GAME SYSTEMS:
+
+1. STORES & LOCATIONS
+Each location has:
+- Name
+- Vibe (affects pricing + item types)
+- Restock timer
+- Hidden rarity bias
+- Negotiation difficulty
+
+Examples:
+- Dusty Thrift Mart (cheap junk, hidden gems)
+- Old Man’s Garage Sale (low prices, high randomness)
+- Urban Vintage Store (higher prices, trend-based demand)
+- Night Flea Market (rare items, shady deals)
+- Estate Sale (high risk, high reward)
+
+Each store visit consumes:
+- Time units
+- Energy (player stat)
+
+Items are procedurally generated per visit.
+
+---
+
+2. ITEM SYSTEM (VERY IMPORTANT)
+Every item has:
+- Name
+- Category (electronics, clothes, furniture, collectibles, misc)
+- Base value
+- Condition (Broken → Mint)
+- Demand score
+- Rarity tier (Common → Mythic)
+- Story flavor text
+- Hidden modifiers (trend boost, collector interest)
+
+Examples:
+- “Cracked iPod Classic”
+- “Vintage Analog Camera”
+- “Unbranded Leather Jacket”
+- “Weird Ceramic Frog”
+
+Condition directly affects:
+- Resale value
+- Repair cost
+- Buyer interest
+
+---
+
+3. NEGOTIATION & SKILL CHECKS
+Buying and selling involve **soft skill systems**:
+- Charisma
+- Market Knowledge
+- Luck
+- Intuition
+
+Negotiation happens via text choices:
+- Lowball offer
+- Fair offer
+- Walk away
+- Bluff
+- Bundle items
+
+Skill checks use weighted RNG + stats.
+
+---
+
+4. SELLING CHANNELS
+Different platforms have different rules:
+- Street Buyers (fast, low margins)
+- Online Listings (slow, high margins)
+- Collectors (very picky, huge payouts)
+- Bulk Resellers (volume-based)
+- Auction Events (high volatility)
+
+Selling may take:
+- Time
+- Listing fees
+- Risk of returns/scams
+
+---
+
+5. INVENTORY SYSTEM
+Inventory is **limited by slots**.
+Each item occupies:
+- Small / Medium / Large space
+
+Players must manage:
+- What to keep
+- What to dump
+- What to repair first
+
+Inventory UI is grid-based but text-described.
+
+---
+
+6. SHOP & UPGRADES
+Dedicated shop screen for permanent upgrades:
+
+UPGRADE TYPES:
+- Inventory Expansion
+- Repair Bench
+- Market Scanner (reveals hidden item value)
+- Negotiation Boost
+- Faster Listings
+- Trend Analyzer
+- Auto-Repair Tools
+
+COSMETIC CUSTOMIZATION:
+- UI color themes
+- Pixel avatars
+- Shop backgrounds
+- Text effects
+- Cursor styles
+
+All upgrades affect gameplay systems meaningfully.
+
+---
+
+7. ECONOMY & META SYSTEMS
+- Inflation over time
+- Seasonal trends
+- Random events (market crash, viral trends)
+- NPC rivals who compete in the market
+- Debt & loans (optional hard mode)
+
+---
+
+VISUAL AESTHETIC (CRITICAL):
+STYLE:
+- Retro pixel-art (16-bit inspired)
+- Dark UI with neon accents
+- CRT-style glow
+- Chunky pixel fonts
+- Low-res icons
+- Subtle scanlines
+
+COLOR PALETTE:
+- Charcoal blacks
+- Muted browns
+- Neon green, cyan, amber highlights
+- Off-white text (not pure white)
+
+UI DESIGN:
+- Pixel-bordered panels
+- Animated text typing effect
+- Pixel icons for items
+- Simple sprite animations for storekeepers
+- Hover effects using pixel shadows
+
+ANIMATIONS:
+- Item appears with pixel pop-in
+- Coins tick upward when selling
+- Red flicker on failed negotiation
+- Green pulse on profit
+
+---
+
+UX & FLOW:
+- Keyboard-friendly
+- Minimal mouse usage
+- Clear feedback for every action
+- No dead screens
+- Autosave via localStorage
+- Game time displayed clearly
+
+---
+
+TECHNICAL CONSTRAINTS:
+- Pure HTML5
+- CSS (no preprocessors)
+- Vanilla JavaScript only
+- Modular JS files
+- No React, Vue, Svelte, Phaser, etc.
+- Use semantic HTML
+- Use requestAnimationFrame only if needed
+- Save/load via localStorage
+
+---
+
+OPTIONAL LLM INTEGRATION (LIGHTWEIGHT):
+Use **common LLM-friendly approaches**, not frameworks:
+- Fetch-based API calls
+- JSON-in / JSON-out prompts
+- Deterministic temperature for balance
+
+Possible LLM uses:
+- Procedural item flavor text
+- NPC dialogue variations
+- Market rumors
+- Event descriptions
+
+DO NOT hard-depend on LLMs for core gameplay logic.
+
+---
+
+DELIVERABLES:
+- index.html
+- styles.css
+- main.js
+- systems folder (economy.js, items.js, player.js, ui.js)
+- assets folder (pixel icons, fonts)
+
+The final game must feel:
+- Addictive
+- Systemically deep
+- Cozy but strategic
+- Text-heavy yet visually satisfying
+- Like a lo-fi indie game you’d sink hours into
+
+THINK LONG-TERM PROGRESSION.
+THINK PLAYER PSYCHOLOGY.
+THINK “ONE MORE FLIP.”
+
+OUTPUT ONLY THE GAME IMPLEMENTATION BASED ON THIS PROMPT.
