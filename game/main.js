@@ -41,6 +41,7 @@ import {
   getSellFlavor,
 } from "./systems/selling.js";
 import { hasUpgrade, purchaseUpgrade } from "./systems/upgrades.js";
+import { initAudio, playSfx } from "./systems/audio.js";
 import {
   checkForEvents,
   cleanupExpiredEvents,
@@ -80,11 +81,13 @@ let state = {
   currentStoreItems: [],
   dayEarnings: 0,
   daySpending: 0,
+  forcedOpenStoreId: null,
 };
 
 // ── Initialize ───────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
   initUI();
+  initAudio();
   showTitleScreen();
 });
 
@@ -179,10 +182,19 @@ function showHub() {
 
 function showStoreSelection() {
   state.currentScreen = "storeSelect";
+  const unlockedStores = STORES.filter((s) => state.player.reputation >= s.unlockRep);
+  const readyStores = unlockedStores.filter((s) =>
+    canVisitStore(s.id, state.player.day, state.player.storesVisited),
+  );
+  state.forcedOpenStoreId = readyStores.length
+    ? null
+    : unlockedStores[Math.floor(Math.random() * unlockedStores.length)]?.id || null;
+
   screenTransition(() => {
     renderStoreSelection(state.player, {
       onBack: showHub,
       onSelectStore: enterStore,
+      forcedOpenStoreId: state.forcedOpenStoreId,
     });
   });
 }
@@ -194,12 +206,15 @@ function enterStore(storeId) {
   // Check energy
   if (state.player.energy < store.energyCost) {
     showNotification("Not enough energy! Rest to restore.", "error");
+    playSfx("error");
     return;
   }
 
-  // Check restock
-  if (!canVisitStore(storeId, state.player.day, state.player.storesVisited)) {
+  // Check restock (unless guaranteed open store for today)
+  const isForcedOpen = state.forcedOpenStoreId === storeId;
+  if (!isForcedOpen && !canVisitStore(storeId, state.player.day, state.player.storesVisited)) {
     showNotification("Store hasn't restocked yet.", "error");
+    playSfx("error");
     return;
   }
 
@@ -311,11 +326,13 @@ function doBuy(itemIndex, price) {
 
   if (!spendCash(state.player, price)) {
     showNotification("Not enough cash!", "error");
+    playSfx("error");
     return;
   }
 
   if (!canAddItem(state.player, item)) {
     showNotification("No room in inventory!", "error");
+    playSfx("error");
     // Refund
     earnCash(state.player, price);
     return;
@@ -333,6 +350,7 @@ function doBuy(itemIndex, price) {
   // Visual feedback
   animateCashChange(-price);
   showNotification(`Bought ${item.name} for ${formatCash(price)}!`, "success");
+  playSfx("buy");
   renderHeader(state.player, state.economy);
 
   autoSave();
@@ -428,13 +446,14 @@ function showSellScreen() {
   });
 }
 
-function doSell(itemId, channelId) {
+function doSell(itemId, channelId, marginPercent = 0) {
   const item = state.player.inventory.find((i) => i.id === itemId);
   const channel = CHANNELS.find((c) => c.id === channelId);
   if (!item || !channel) return;
 
   if (!canSellOnChannel(item, channel)) {
     showNotification("This item doesn't qualify for that channel.", "error");
+    playSfx("error");
     return;
   }
 
@@ -453,6 +472,7 @@ function doSell(itemId, channelId) {
     state.player,
     item,
     adjustedChannel,
+    marginPercent,
     state.economy,
   );
   const flavor = getSellFlavor(result.success);
@@ -462,6 +482,7 @@ function doSell(itemId, channelId) {
     recordFlip(state.player, item.buyPrice, result.price);
     state.dayEarnings += result.price;
     animateCashChange(result.price);
+    playSfx("sell");
     // Skill gain from selling
     applySkillGains(state.player, { marketKnowledge: 0.05, intuition: 0.03 });
   }
@@ -469,6 +490,7 @@ function doSell(itemId, channelId) {
   renderHeader(state.player, state.economy);
   autoSave();
 
+  if (result.instant && !result.success) playSfx("error");
   showSellResult(result, flavor, () => {
     showSellScreen();
   });

@@ -54,10 +54,18 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   line-height: 1.4;
-  font-size: 1.2rem;
+  font-size: 1.35rem;
   image-rendering: pixelated;
 }
 
+
+
+body {
+  background-image:
+    radial-gradient(circle at 15% 20%, rgba(0, 229, 255, 0.08), transparent 25%),
+    radial-gradient(circle at 85% 15%, rgba(251, 191, 36, 0.08), transparent 30%),
+    radial-gradient(circle at 50% 100%, rgba(74, 222, 128, 0.05), transparent 35%);
+}
 /* ── Scanline Overlay ─────────────────────── */
 #scanlines {
   position: fixed;
@@ -95,7 +103,7 @@ body::after {
 
 /* ── Game Container ───────────────────────── */
 #game-container {
-  max-width: 800px;
+  max-width: 1220px;
   margin: 0 auto;
   min-height: 100vh;
   display: flex;
@@ -127,7 +135,7 @@ body::after {
 
 .header-title {
   font-family: var(--font-pixel);
-  font-size: 0.55rem;
+  font-size: 0.64rem;
   color: var(--accent-amber);
   text-shadow: 0 0 8px var(--glow-amber);
   text-transform: uppercase;
@@ -197,7 +205,7 @@ body::after {
 /* ── Main Content Area ────────────────────── */
 #main-content {
   flex: 1;
-  padding: 16px;
+  padding: 22px;
   overflow-y: auto;
 }
 
@@ -337,7 +345,7 @@ body::after {
   color: var(--accent-green);
   text-align: center;
   font-family: var(--font-pixel);
-  font-size: 0.6rem;
+  font-size: 0.72rem;
   letter-spacing: 1px;
 }
 
@@ -350,7 +358,7 @@ body::after {
 .btn-secondary {
   text-align: center;
   font-family: var(--font-pixel);
-  font-size: 0.55rem;
+  font-size: 0.64rem;
   letter-spacing: 1px;
   color: var(--text-secondary);
 }
@@ -452,7 +460,7 @@ body::after {
 
 .panel-header {
   font-family: var(--font-pixel);
-  font-size: 0.5rem;
+  font-size: 0.62rem;
   color: var(--accent-cyan);
   text-shadow: 0 0 6px var(--glow-cyan);
   margin-bottom: 10px;
@@ -642,7 +650,7 @@ body::after {
 
 .item-name {
   font-family: var(--font-pixel);
-  font-size: 0.45rem;
+  font-size: 0.56rem;
   letter-spacing: 0.5px;
   flex: 1;
 }
@@ -1143,7 +1151,7 @@ body::after {
 
 .modal-title {
   font-family: var(--font-pixel);
-  font-size: 0.6rem;
+  font-size: 0.72rem;
   color: var(--accent-amber);
   margin-bottom: 10px;
   letter-spacing: 1px;
@@ -1184,7 +1192,7 @@ body::after {
   top: -20px;
   right: 20px;
   font-family: var(--font-pixel);
-  font-size: 0.55rem;
+  font-size: 0.64rem;
   pointer-events: none;
   animation: cashFloat 1.5s steps(8) forwards;
   z-index: 200;
@@ -1223,7 +1231,7 @@ body::after {
 
 .screen-header h2 {
   font-family: var(--font-pixel);
-  font-size: 0.6rem;
+  font-size: 0.72rem;
   color: var(--text-primary);
   letter-spacing: 1px;
 }
@@ -1348,6 +1356,37 @@ body.theme-ocean {
   background: var(--accent-cyan);
 }
 
+
+
+.sell-layout {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.margin-panel {
+  margin-bottom: 10px;
+}
+
+#margin-slider {
+  width: 100%;
+  margin-top: 10px;
+  accent-color: var(--accent-cyan);
+}
+
+.sell-estimate {
+  border: 1px solid var(--border);
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  margin-top: 8px;
+}
+
+@media (max-width: 1000px) {
+  .sell-layout {
+    grid-template-columns: 1fr;
+  }
+}
 /* ── Responsive ───────────────────────────── */
 @media (max-width: 600px) {
   .hub-actions {

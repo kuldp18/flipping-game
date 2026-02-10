@@ -19,7 +19,7 @@ import {
   getFreeSlots,
 } from "./player.js";
 import { STORES, getRestockCountdown } from "./stores.js";
-import { CHANNELS, getSellPriceEstimate, canSellOnChannel } from "./selling.js";
+import { CHANNELS, getSellPriceEstimate, canSellOnChannel, getSalePreview } from "./selling.js";
 import {
   UPGRADES,
   hasUpgrade,
@@ -255,6 +255,7 @@ export function renderHubScreen(player, economy, activeEvents, callbacks) {
 
 // ── Store Selection Screen ───────────────────
 export function renderStoreSelection(player, callbacks) {
+  const forcedOpenStoreId = callbacks.forcedOpenStoreId || null;
   const stores = STORES.filter((s) => player.reputation >= s.unlockRep);
   const lockedStores = STORES.filter((s) => player.reputation < s.unlockRep);
 
@@ -272,7 +273,7 @@ export function renderStoreSelection(player, callbacks) {
               player.day,
               player.storesVisited,
             );
-            const canVisit = restock === 0;
+            const canVisit = restock === 0 || store.id === forcedOpenStoreId;
             const hasEnergy = player.energy >= store.energyCost;
             const disabled = !canVisit || !hasEnergy;
             return `
@@ -285,7 +286,7 @@ export function renderStoreSelection(player, callbacks) {
                   <span>⚡ ${store.energyCost} energy</span>
                   <span>🎲 Negotiation: ${store.negotiationDifficulty}%</span>
                 </div>
-                ${!canVisit ? `<div class="store-restock text-muted">Restocks in ${restock} day(s)</div>` : ""}
+                ${store.id === forcedOpenStoreId ? `<div class="store-restock text-green">Special pop-up day: open now</div>` : (!canVisit ? `<div class="store-restock text-muted">Restocks in ${restock} day(s)</div>` : "")}
                 ${!hasEnergy ? `<div class="store-restock text-red">Not enough energy</div>` : ""}
               </div>
             </div>
@@ -587,48 +588,56 @@ export function renderSellScreen(player, economy, callbacks) {
         player.inventory.length === 0
           ? '<div class="empty-text">Nothing to sell. Go find some deals!</div>'
           : `
-      <div class="sell-instructions text-muted">Select an item, then choose a selling channel.</div>
-      <div class="sell-items">
-        ${player.inventory
-          .map((item) => {
-            const display = getItemDisplay(item);
-            return `
-            <div class="sell-item-card" data-id="${item.id}" role="button" tabindex="0">
-              <span class="item-category" style="color:${display.categoryColor}">${display.categoryIcon}</span>
-              <span class="item-name">${item.name}</span>
-              <span class="item-rarity" style="color:${display.rarityColor}">${display.raritySymbol} ${display.rarity}</span>
-              <span class="item-condition">${display.conditionIcon} ${display.condition}</span>
-            </div>
-          `;
-          })
-          .join("")}
-      </div>
-      <div id="sell-channel-section" class="sell-channels" style="display:none">
-        <div class="panel-header">Choose Channel</div>
-        ${channels
-          .map(
-            (ch) => `
-          <button class="btn btn-channel" data-channel="${ch.id}">
-            <span class="btn-icon">${ch.icon}</span>
-            <span class="btn-label">${ch.name}</span>
-            <span class="btn-sub">${ch.description}</span>
-            <span class="btn-meta">${ch.speed === 0 ? "Instant" : ch.speed + "d"} · ${ch.feePercent}% fee · Risk: ${ch.risk}%</span>
-          </button>
-        `,
-          )
-          .join("")}
-        ${lockedChannels
-          .map(
-            (ch) => `
-          <div class="btn btn-channel btn-locked">
-            <span class="btn-icon">🔒</span>
-            <span class="btn-label">${ch.name}</span>
-            <span class="btn-sub">Requires ${ch.minRep} reputation</span>
+      <div class="sell-instructions text-muted">Pick an item, set a target margin, then choose where to sell.</div>
+      <div class="sell-layout">
+        <div class="sell-items">
+          ${player.inventory
+            .map((item) => {
+              const display = getItemDisplay(item);
+              return `
+              <div class="sell-item-card" data-id="${item.id}" role="button" tabindex="0">
+                <span class="item-category" style="color:${display.categoryColor}">${display.categoryIcon}</span>
+                <span class="item-name">${item.name}</span>
+                <span class="item-rarity" style="color:${display.rarityColor}">${display.raritySymbol} ${display.rarity}</span>
+                <span class="item-condition">${display.conditionIcon} ${display.condition}</span>
+              </div>
+            `;
+            })
+            .join("")}
+        </div>
+        <div id="sell-channel-section" class="sell-channels" style="display:none">
+          <div class="margin-panel panel">
+            <div class="panel-header">🎯 Pricing Strategy</div>
+            <label for="margin-slider" class="text-muted">Target Margin: <span id="margin-value" class="text-cyan">20%</span></label>
+            <input id="margin-slider" type="range" min="-40" max="140" value="20" step="5" />
+            <div id="margin-hint" class="btn-meta">Balanced pricing with moderate close rate.</div>
           </div>
-        `,
-          )
-          .join("")}
-        <div id="sell-estimate" class="sell-estimate"></div>
+          <div class="panel-header">Choose Channel</div>
+          ${channels
+            .map(
+              (ch) => `
+            <button class="btn btn-channel" data-channel="${ch.id}">
+              <span class="btn-icon">${ch.icon}</span>
+              <span class="btn-label">${ch.name}</span>
+              <span class="btn-sub">${ch.description}</span>
+              <span class="btn-meta">${ch.speed === 0 ? "Instant" : ch.speed + "d"} · ${ch.feePercent}% fee · Risk: ${ch.risk}%</span>
+            </button>
+          `,
+            )
+            .join("")}
+          ${lockedChannels
+            .map(
+              (ch) => `
+            <div class="btn btn-channel btn-locked">
+              <span class="btn-icon">🔒</span>
+              <span class="btn-label">${ch.name}</span>
+              <span class="btn-sub">Requires ${ch.minRep} reputation</span>
+            </div>
+          `,
+            )
+            .join("")}
+          <div id="sell-estimate" class="sell-estimate"></div>
+        </div>
       </div>
       `
       }
@@ -640,6 +649,29 @@ export function renderSellScreen(player, economy, callbacks) {
     ?.addEventListener("click", callbacks.onBack);
 
   let selectedItemId = null;
+  let marginPercent = 20;
+
+  const slider = document.getElementById("margin-slider");
+  const marginValue = document.getElementById("margin-value");
+  const marginHint = document.getElementById("margin-hint");
+
+  const updateMarginUI = () => {
+    if (!slider || !marginValue || !marginHint) return;
+    marginPercent = parseInt(slider.value, 10);
+    marginValue.textContent = `${marginPercent}%`;
+    if (marginPercent < 0) {
+      marginHint.textContent = "Fast liquidation: lower profit, high close rate.";
+    } else if (marginPercent <= 30) {
+      marginHint.textContent = "Balanced pricing with moderate close rate.";
+    } else if (marginPercent <= 80) {
+      marginHint.textContent = "Aggressive: higher upside, more buyer drop-offs.";
+    } else {
+      marginHint.textContent = "Greedy mode: huge upside, low probability.";
+    }
+    if (selectedItemId !== null) updateSellEstimates(selectedItemId, player, economy, marginPercent);
+  };
+
+  slider?.addEventListener("input", updateMarginUI);
 
   document.querySelectorAll(".sell-item-card").forEach((card) => {
     const handler = () => {
@@ -649,7 +681,7 @@ export function renderSellScreen(player, economy, callbacks) {
         .forEach((c) => c.classList.remove("selected"));
       card.classList.add("selected");
       document.getElementById("sell-channel-section").style.display = "block";
-      updateSellEstimates(selectedItemId, player, economy);
+      updateSellEstimates(selectedItemId, player, economy, marginPercent);
     };
     card.addEventListener("click", handler);
     card.addEventListener("keydown", (e) => {
@@ -661,13 +693,15 @@ export function renderSellScreen(player, economy, callbacks) {
     if (btn.classList.contains("btn-locked")) return;
     btn.addEventListener("click", () => {
       if (selectedItemId !== null) {
-        callbacks.onSell(selectedItemId, btn.dataset.channel);
+        callbacks.onSell(selectedItemId, btn.dataset.channel, marginPercent);
       }
     });
   });
+
+  updateMarginUI();
 }
 
-function updateSellEstimates(itemId, player, economy) {
+function updateSellEstimates(itemId, player, economy, marginPercent = 20) {
   const item = player.inventory.find((i) => i.id === itemId);
   if (!item) return;
   const $estimate = document.getElementById("sell-estimate");
@@ -677,10 +711,11 @@ function updateSellEstimates(itemId, player, economy) {
     if (!qualifies)
       return `<div class="text-muted">${ch.name}: Item doesn't qualify</div>`;
     const est = getSellPriceEstimate(item, ch, economy);
-    return `<div>${ch.icon} ${ch.name}: <span class="text-green">${formatCash(est.low)} – ${formatCash(est.high)}</span></div>`;
+    const preview = getSalePreview(player, item, ch, marginPercent, economy);
+    return `<div>${ch.icon} ${ch.name}: <span class="text-green">${formatCash(preview.expectedOnSuccess)}</span> · <span class="text-cyan">${preview.successChance}% close</span> <span class="text-muted">(base ${formatCash(est.low)}–${formatCash(est.high)})</span></div>`;
   });
   $estimate.innerHTML =
-    `<div class="panel-header">Estimated Prices</div>` + lines.join("");
+    `<div class="panel-header">Margin Outcome Preview</div>` + lines.join("");
 }
 
 // ── Shop Screen ──────────────────────────────
